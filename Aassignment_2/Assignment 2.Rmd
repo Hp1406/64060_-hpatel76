@@ -1,0 +1,99 @@
+---
+title: "Assignment 2"
+author: "Harsh Patel"
+date: "2025-09-22"
+output:
+  word_document: default
+  html_document:
+    df_print: paged
+  pdf_document: default
+---
+
+```{r}
+# My k-NN Model on Universal Bank Dataset
+
+
+# First, I’ll load the packages I need
+
+library(caret)
+library(class)
+library(e1071)
+library(dplyr)
+# k-NN model on Universal Bank data
+
+# load data (renamed file to avoid spaces)
+df <- read.csv("C:/Users/jbhsp/Downloads/UniversalBank - Copy.csv")
+df <- select(df, -c(ID, ZIP.Code))
+
+# convert categorical variables
+df$Personal.Loan <- as.factor(df$Personal.Loan)
+df$Family <- as.factor(df$Family)
+df$Education <- as.factor(df$Education)
+df$Securities.Account <- as.factor(df$Securities.Account)
+df$CD.Account <- as.factor(df$CD.Account)
+df$Online <- as.factor(df$Online)
+df$CreditCard <- as.factor(df$CreditCard)
+
+# split data
+set.seed(42)
+ind <- createDataPartition(df$Personal.Loan, p = 0.5, list = FALSE)
+train_df <- df[ind, ]
+temp_df <- df[-ind, ]
+ind_val <- createDataPartition(temp_df$Personal.Loan, p = 0.6, list = FALSE)
+validation_df <- temp_df[ind_val, ]
+test_df <- temp_df[-ind_val, ]
+
+# normalize numeric features
+numeric_cols <- c("Age", "Experience", "Income", "CCAvg", "Mortgage")
+pre_process <- preProcess(train_df[, numeric_cols], method = c("range"))
+train_norm <- predict(pre_process, train_df[, numeric_cols])
+validation_norm <- predict(pre_process, validation_df[, numeric_cols])
+test_norm <- predict(pre_process, test_df[, numeric_cols])
+
+train_ready <- bind_cols(train_norm, train_df %>% select(-all_of(numeric_cols)))
+validation_ready <- bind_cols(validation_norm, validation_df %>% select(-all_of(numeric_cols)))
+test_ready <- bind_cols(test_norm, test_df %>% select(-all_of(numeric_cols)))
+
+predictor_cols <- names(train_ready)[!names(train_ready) %in% "Personal.Loan"]
+target_col <- "Personal.Loan"
+
+# find best k
+k_values <- 1:20
+accuracy_df <- data.frame(k = k_values, accuracy = rep(0, length(k_values)))
+
+for (k_val in k_values) {
+  knn_pred <- knn(train = train_ready[, predictor_cols],
+                  test = validation_ready[, predictor_cols],
+                  cl = train_ready[, target_col],
+                  k = k_val)
+  accuracy_df[k_val, "accuracy"] <- mean(knn_pred == validation_ready[, target_col])
+}
+
+optimal_k <- accuracy_df[which.max(accuracy_df$accuracy), "k"]
+cat("Best k:", optimal_k, "\n")
+
+plot(accuracy_df$k, accuracy_df$accuracy, type = "b",
+     main = "k vs Accuracy", xlab = "k", ylab = "Accuracy")
+abline(v = optimal_k, col = "red", lty = 2)
+
+# evaluate model
+knn_pred_train <- knn(train = train_ready[, predictor_cols],
+                      test = train_ready[, predictor_cols],
+                      cl = train_ready[, target_col],
+                      k = optimal_k)
+train_cm <- confusionMatrix(knn_pred_train, train_ready[, target_col])
+cat("\nTraining Accuracy:", round(train_cm$overall['Accuracy'], 4), "\n")
+
+knn_pred_val <- knn(train = train_ready[, predictor_cols],
+                    test = validation_ready[, predictor_cols],
+                    cl = train_ready[, target_col],
+                    k = optimal_k)
+validation_cm <- confusionMatrix(knn_pred_val, validation_ready[, target_col])
+cat("Validation Accuracy:", round(validation_cm$overall['Accuracy'], 4), "\n")
+
+knn_pred_test <- knn(train = train_ready[, predictor_cols],
+                     test = test_ready[, predictor_cols],
+                     cl = train_ready[, target_col],
+                     k = optimal_k)
+test_cm <- confusionMatrix(knn_pred_test, test_ready[, target_col])
+cat("Test Accuracy:", round(test_cm$overall['Accuracy'], 4), "\n")
