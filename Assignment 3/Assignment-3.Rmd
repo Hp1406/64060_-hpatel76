@@ -1,0 +1,115 @@
+---
+title: "Assignment 3"
+author: "Harsh Patel"
+date: "2025-10-06"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+
+```{r}
+# -------------------------------------------------------
+# Assignment 3: Naive Bayes Classification - Universal Bank
+# Name: Harsh Patel
+# -------------------------------------------------------
+
+# Load libraries
+library(dplyr)
+library(e1071)
+library(caret)
+
+# Reading the data
+df <- read.csv("C:/Users/jbhsp/Downloads/UniversalBank - Copy.csv")
+
+# Checking column names
+names(df)
+
+# Keeping only required columns
+df <- df %>%
+  rename(
+    Loan = Personal.Loan,
+    CC = CreditCard,
+    Online = Online
+  ) %>%
+  select(Online, CC, Loan)
+
+# Making sure variables are numeric (0/1)
+df$Online <- as.integer(df$Online)
+df$CC <- as.integer(df$CC)
+df$Loan <- as.integer(df$Loan)
+
+# Splitting data into training (60%) and validation (40%)
+set.seed(123)
+train_index <- createDataPartition(df$Loan, p = 0.6, list = FALSE)
+train <- df[train_index, ]
+val <- df[-train_index, ]
+
+# =======================================================
+# A. Pivot table with Online (columns), CC and Loan (rows)
+# =======================================================
+pivot <- with(train, table(CC, Loan, Online))
+pivot
+
+# =======================================================
+# B. Probability P(Loan=1 | CC=1, Online=1)
+# =======================================================
+count_cc1_online1_loan1 <- nrow(filter(train, CC == 1, Online == 1, Loan == 1))
+count_cc1_online1_total <- nrow(filter(train, CC == 1, Online == 1))
+p_table_B <- count_cc1_online1_loan1 / count_cc1_online1_total
+cat("\nB) P(Loan=1 | CC=1, Online=1) =", p_table_B, "\n")
+
+# =======================================================
+# C. Pivot tables for Loan vs Online and Loan vs CC
+# =======================================================
+pivot_online <- table(train$Loan, train$Online)
+pivot_cc <- table(train$Loan, train$CC)
+
+cat("\nC) Pivot: Loan vs Online\n")
+print(pivot_online)
+cat("\nC) Pivot: Loan vs CreditCard\n")
+print(pivot_cc)
+
+# =======================================================
+# D. Computing probabilities
+# =======================================================
+p_cc_given_loan1 <- sum(train$CC == 1 & train$Loan == 1) / sum(train$Loan == 1)
+p_online_given_loan1 <- sum(train$Online == 1 & train$Loan == 1) / sum(train$Loan == 1)
+p_loan1 <- mean(train$Loan == 1)
+
+p_cc_given_loan0 <- sum(train$CC == 1 & train$Loan == 0) / sum(train$Loan == 0)
+p_online_given_loan0 <- sum(train$Online == 1 & train$Loan == 0) / sum(train$Loan == 0)
+p_loan0 <- mean(train$Loan == 0)
+
+cat("\nD) Probabilities:\n")
+cat("P(CC=1 | Loan=1) =", p_cc_given_loan1, "\n")
+cat("P(Online=1 | Loan=1) =", p_online_given_loan1, "\n")
+cat("P(Loan=1) =", p_loan1, "\n")
+cat("P(CC=1 | Loan=0) =", p_cc_given_loan0, "\n")
+cat("P(Online=1 | Loan=0) =", p_online_given_loan0, "\n")
+cat("P(Loan=0) =", p_loan0, "\n")
+
+# =======================================================
+# E. Naive Bayes formula for P(Loan=1 | CC=1, Online=1)
+# =======================================================
+num1 <- p_cc_given_loan1 * p_online_given_loan1 * p_loan1
+num0 <- p_cc_given_loan0 * p_online_given_loan0 * p_loan0
+p_nb <- num1 / (num1 + num0)
+cat("\nE) Naive Bayes P(Loan=1 | CC=1, Online=1) =", p_nb, "\n")
+
+# =======================================================
+# F. Comparison between pivot and Naive Bayes
+# =======================================================
+cat("\nF) Comparison:\n")
+cat("Pivot-table estimate:", p_table_B, "\n")
+cat("Naive Bayes estimate:", p_nb, "\n")
+
+# =======================================================
+# G. Naive Bayes model using e1071
+# =======================================================
+model <- naiveBayes(as.factor(Loan) ~ CC + Online, data = train)
+predict_case <- predict(model, newdata = data.frame(CC = 1, Online = 1), type = "raw")
+cat("\nG) Model posterior P(Loan=1 | CC=1, Online=1):", predict_case[2], "\n")
+
+```
+
