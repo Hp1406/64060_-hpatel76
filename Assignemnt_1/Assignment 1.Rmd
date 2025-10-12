@@ -1,0 +1,51 @@
+---
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+```{r}
+# R + Git Assignment 1
+# Author: Harsh Patel
+
+# Load dataset
+data <- as.data.frame(Titanic)
+
+# Inspect data
+head(data)
+
+# Descriptive stats
+summary(data)
+table(data$Class)
+table(data$Sex)
+
+# New variable: Survival Rate = Survived count / Total count per Class
+library(dplyr)
+data <- data %>%
+  group_by(Class, Survived) %>%
+  summarise(Total = sum(Freq), .groups = "drop") %>%
+  group_by(Class) %>%
+  mutate(SurvivalRate = Total / sum(Total))
+
+head(data)
+
+# Plots
+barplot(table(as.data.frame(Titanic)$Class),
+        main="Passenger Class Distribution",
+        xlab="Class", ylab="Count", col="lightblue")
+
+barplot(table(as.data.frame(Titanic)$Survived),
+        main="Survival Count",
+        xlab="Survived", ylab="Count", col=c("red","green"))
+
+plot(jitter(as.numeric(data$Class)), data$SurvivalRate,
+     pch=19, col=c("red","green")[as.numeric(data$Survived)],
+     xaxt="n", xlab="Passenger Class", ylab="Survival Rate",
+     main="Survival Rate by Class")
+axis(1, at=1:4, labels=levels(data$Class))
+legend("topright", legend=levels(data$Survived),
+       col=c("red","green"), pch=19)
+
+
+```
+
