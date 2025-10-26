@@ -1,0 +1,86 @@
+---
+title: "Assignment_4"
+author: "Harsh Patel"
+date: "2025-10-20"
+output:
+  word_document: default
+  html_document: default
+  pdf_document: default
+---
+```{r}
+
+# (a) Use only numerical variables (1–9) to cluster the 21 firms
+library(tidyverse)
+library(factoextra)
+library(cluster)
+
+pharma_data <- read_csv("C:/Users/jbhsp/Downloads/Pharmaceuticals.csv")
+
+head(pharma_data)
+str(pharma_data)
+
+clustering_vars <- pharma_data %>% select(Market_Cap:Net_Profit_Margin)
+sum(is.na(clustering_vars))
+
+scaled_data <- scale(clustering_vars)
+scaled_data <- as.data.frame(scaled_data)
+
+set.seed(42)
+elbow_plot <- fviz_nbclust(
+  scaled_data,
+  kmeans,
+  method = "wss",
+  k.max = 10
+) +
+  geom_vline(xintercept = 3, linetype = 2) +
+  labs(title = "Elbow Method for Optimal k")
+elbow_plot
+
+# (b) Interpret the clusters with respect to numerical variables used
+set.seed(42)
+kmeans_result <- kmeans(scaled_data, centers = 3, nstart = 25)
+
+pharma_clustered <- pharma_data %>%
+  mutate(Cluster = as.factor(kmeans_result$cluster))
+
+table(pharma_clustered$Cluster)
+
+cluster_summary <- pharma_clustered %>%
+  group_by(Cluster) %>%
+  summarise(
+    Count = n(),
+    across(Market_Cap:Net_Profit_Margin, ~ round(mean(.), 2))
+  )
+cluster_summary
+
+fviz_cluster(
+  object = list(data = scaled_data, cluster = kmeans_result$cluster),
+  geom = "point",
+  ellipse.type = "convex",
+  main = "k-Means Clustering (k = 3)"
+)
+
+# (c) Examine patterns for categorical variables (10–12)
+table(pharma_clustered$Cluster, pharma_clustered$Median_Recommendation)
+table(pharma_clustered$Cluster, pharma_clustered$Location)
+table(pharma_clustered$Cluster, pharma_clustered$Exchange)
+
+# (d) Provide descriptive names for each cluster
+pharma_clustered <- pharma_clustered %>%
+  mutate(Cluster_Name = factor(Cluster,
+                               levels = c(1, 2, 3),
+                               labels = c("Large Cap, Mature Firms",
+                                          "High-Growth, Low-Profit Firms",
+                                          "Mid-Sized, Profitable Firms")))
+
+pharma_clustered %>% select(Symbol, Name, Cluster, Cluster_Name)
+
+# Save results
+write_csv(pharma_clustered, "Pharmaceuticals_with_Clusters.csv")
+write_csv(cluster_summary, "Cluster_Summary.csv")
+
+print("K-Means Clustering completed successfully.")
+
+```
+
+
