@@ -1,0 +1,144 @@
+---
+title: "Assignment_5"
+author: "Harsh Patel"
+date: "2025-11-13"
+output:
+  word_document: default
+  html_document: default
+---
+```{r}
+# Assignment 5 — Hierarchical Clustering on Cereals
+# Author: Harsh Patel
+
+# Load libraries
+library(cluster)
+library(factoextra)
+library(dplyr)
+library(tidyr)
+library(mclust)
+
+set.seed(123)
+
+# --- Load and clean data ---
+cereals <- read.csv("C:/Users/jbhsp/Downloads/Cereals.csv")
+cereals_clean <- cereals %>% drop_na()
+
+# Separate cereal names if available
+if ("name" %in% tolower(names(cereals_clean))) {
+  name_col <- names(cereals_clean)[tolower(names(cereals_clean)) == "name"]
+} else if ("cereal" %in% tolower(names(cereals_clean))) {
+  name_col <- names(cereals_clean)[tolower(names(cereals_clean)) == "cereal"]
+} else {
+  name_col <- NULL
+}
+
+if (!is.null(name_col)) {
+  cereal_names <- cereals_clean[[name_col]]
+  data_num <- cereals_clean %>% select(-all_of(name_col))
+} else {
+  cereal_names <- rownames(cereals_clean)
+  data_num <- cereals_clean
+}
+
+data_num <- data_num %>% select(where(is.numeric))
+rownames(data_num) <- cereal_names
+data_scaled <- scale(data_num)
+
+# --- AGNES Clustering (distance + linkage methods) ---
+dist_euc <- dist(data_scaled)
+
+agnes_single   <- agnes(data_scaled, method = "single")
+agnes_complete <- agnes(data_scaled, method = "complete")
+agnes_average  <- agnes(data_scaled, method = "average")
+agnes_ward     <- agnes(data_scaled, method = "ward")
+
+# Compare cophenetic correlations
+coph_scores <- data.frame(
+  method = c("single","complete","average","ward"),
+  correlation = c(
+    cor(cophenetic(as.hclust(agnes_single)), dist_euc),
+    cor(cophenetic(as.hclust(agnes_complete)), dist_euc),
+    cor(cophenetic(as.hclust(agnes_average)), dist_euc),
+    cor(cophenetic(as.hclust(agnes_ward)), dist_euc)
+  )
+)
+print(coph_scores)
+
+# --- Choose number of clusters (silhouette) ---
+sil_values <- sapply(2:8, function(k){
+  cl <- cutree(as.hclust(agnes_ward), k = k)
+  mean(silhouette(cl, dist_euc)[,3])
+})
+
+sil_table <- data.frame(k = 2:8, avg_silhouette = sil_values)
+print(sil_table)
+
+best_k <- sil_table$k[which.max(sil_table$avg_silhouette)]
+cat("Best number of clusters:", best_k, "\n")
+
+final_clusters <- cutree(as.hclust(agnes_ward), k = best_k)
+table(final_clusters)
+
+# --- Cluster profiles ---
+cluster_profile <- data_num %>%
+  mutate(cluster = factor(final_clusters)) %>%
+  group_by(cluster) %>%
+  summarise(across(everything(), mean)) %>%
+  ungroup()
+
+print(cluster_profile)
+
+# --- Identify “healthy” cereals ---
+vars <- c("calories","sugar","fiber","protein","sodium")
+vars <- intersect(vars, names(data_num))
+
+profile <- cluster_profile %>%
+  select(cluster, all_of(vars))
+
+# Define healthy cluster as lowest sugar (fallback: lowest calories)
+if ("sugar" %in% colnames(profile)) {
+  healthy_cluster <- which.min(profile$sugar)
+} else {
+  healthy_cluster <- which.min(profile$calories)
+}
+
+cat("Healthy cluster =", healthy_cluster, "\n")
+
+healthy_cereals <- names(final_clusters)[final_clusters == healthy_cluster]
+print(healthy_cereals)
+
+# --- Stability check (Adjusted Rand Index) ---
+n <- nrow(data_scaled)
+idx <- sample(1:n, size = floor(0.5*n))
+
+partA <- data_scaled[idx, ]
+partB <- data_scaled[-idx, ]
+
+agnes_A <- agnes(partA, method = "ward")
+clA <- cutree(as.hclust(agnes_A), k = best_k)
+
+centroids <- aggregate(partA, by = list(clA), FUN = mean)
+rownames(centroids) <- centroids$Group.1
+centroids <- as.matrix(centroids[,-1])
+
+assign_to <- function(obs, centers){
+  d <- apply(centers, 1, function(c) sum((obs - c)^2))
+  as.integer(names(which.min(d)))
+}
+
+assign_B <- apply(partB, 1, assign_to, centers = centroids)
+
+agnes_B <- agnes(partB, method = "ward")
+clB <- cutree(as.hclust(agnes_B), k = best_k)
+
+ari <- adjustedRandIndex(assign_B, clB)
+cat("Adjusted Rand Index:", ari, "\n")
+
+# --- Save results ---
+write.csv(cluster_profile, "cluster_profile_means.csv", row.names = FALSE)
+write.csv(data.frame(name = names(final_clusters), cluster = final_clusters),
+          "cereal_clusters.csv",
+          row.names = FALSE)
+
+```
+
